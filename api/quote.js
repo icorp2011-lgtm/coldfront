@@ -1,81 +1,86 @@
-// api/quote.js — Coldfront proxy (fixed chart endpoint)
+// api/quote.js — Coldfront proxy
 
 const yahooFinance = require("yahoo-finance2").default;
-try { yahooFinance.suppressNotices(["yahooSurvey", "ripHistorical"]); } catch (e) {}
+try { yahooFinance.suppressNotices(["yahooSurvey"]); } catch (e) {}
 
 const cache = {};
-const TTL = 60000;  // 60s cache
 
 module.exports = async (req, res) => {
-  res.setHeader("Cache-Control", "public, max-age=60");
-  
   const { yahoo, hist, period } = req.query;
 
-  // === CHART DATA ===
+  // CHART DATA — use direct fetch
   if (hist && period) {
     const symbol = String(hist).trim();
-    const key = `H:${symbol}:${period}`;
+    const cacheKey = `CHART:${symbol}:${period}`;
     const now = Date.now();
     
-    if (cache[key] && now - cache[key].t < TTL * 5) {
-      return res.status(200).json(cache[key].data || { history: [] });
+    if (cache[cacheKey] && now - cache[cacheKey].t < 300000) {  // 5 min cache
+      return res.json(cache[cacheKey].data);
     }
 
     try {
-      // Period mapping
-      const pMap = {
-        "1m": "1mo", "3m": "3mo", "6m": "6mo", "1y": "1y",
-        "5y": "5y", "10y": "10y", "20y": "max", "all": "max"
+      // Convert period to days
+      const periodDays = {
+        "1m": 30, "3m": 90, "6m": 180, "1y": 365,
+        "5y": 1825, "10y": 3650, "20y": 7300, "all": 10000
       };
-      const yPeriod = pMap[period] || "1y";
+      const days = periodDays[period] || 365;
+      const endTime = Math.floor(Date.now() / 1000);
+      const startTime = endTime - (days * 86400);
 
-      // Fetch historical data
-      const result = await yahooFinance.historical(symbol, { period: yPeriod });
+      // Fetch from Yahoo directly
+      const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?interval=1d&period1=${startTime}&period2=${endTime}`;
+      const r = await fetch(url);
       
-      if (!Array.isArray(result) || !result.length) {
-        cache[key] = { t: now, data: { history: [] } };
-        return res.status(200).json({ history: [] });
+      if (!r.ok) {
+        return res.json({ history: [] });
       }
 
-      // Format for TradingView
-      const history = result
-        .map(bar => ({
-          time: Math.floor(bar.date.getTime() / 1000),
-          open: parseFloat((bar.open || bar.close).toFixed(2)),
-          high: parseFloat((bar.high || bar.close).toFixed(2)),
-          low: parseFloat((bar.low || bar.close).toFixed(2)),
-          close: parseFloat(bar.close.toFixed(2))
-        }))
-        .sort((a, b) => a.time - b.time)
-        .slice(-500);  // Limit to last 500 bars for performance
+      const chartData = await r.json();
+      const quotes = chartData?.chart?.result?.[0]?.timestamp || [];
+      const closes = chartData?.chart?.result?.[0]?.indicators?.quote?.[0]?.close || [];
+      const highs = chartData?.chart?.result?.[0]?.indicators?.quote?.[0]?.high || [];
+      const lows = chartData?.chart?.result?.[0]?.indicators?.quote?.[0]?.low || [];
+      const opens = chartData?.chart?.result?.[0]?.indicators?.quote?.[0]?.open || [];
 
-      const data = { history, symbol, period };
-      cache[key] = { t: now, data };
-      return res.status(200).json(data);
-      
+      const history = quotes
+        .map((time, i) => ({
+          time: time,
+          close: closes[i] ? parseFloat(closes[i].toFixed(2)) : null,
+          open: opens[i] ? parseFloat(opens[i].toFixed(2)) : null,
+          high: highs[i] ? parseFloat(highs[i].toFixed(2)) : null,
+          low: lows[i] ? parseFloat(lows[i].toFixed(2)) : null
+        }))
+        .filter(d => d.close && d.close > 0)
+        .slice(-500);
+
+      const result = { history };
+      cache[cacheKey] = { t: now, data: result };
+      return res.json(result);
+
     } catch (e) {
-      console.error(`Chart fetch failed for ${symbol}:`, e.message);
-      return res.status(200).json({ history: [], error: e.message });
+      console.error("Chart error:", e.message);
+      return res.json({ history: [] });
     }
   }
 
-  // === LIVE QUOTES ===
+  // LIVE QUOTES
   const yahSyms = String(yahoo || "").split(",").map(s => s.trim()).filter(Boolean);
-  if (!yahSyms.length) return res.status(200).json({ yahoo: {} });
+  if (!yahSyms.length) return res.json({ yahoo: {} });
 
-  const key = "Q:" + yahSyms.join(",");
+  const cacheKey = "QUOTES:" + yahSyms.join(",");
   const now = Date.now();
 
-  if (cache[key] && now - cache[key].t < TTL) {
-    return res.status(200).json(cache[key].data);
+  if (cache[cacheKey] && now - cache[cacheKey].t < 60000) {
+    return res.json(cache[cacheKey].data);
   }
 
   try {
     const quotes = await yahooFinance.quote(yahSyms);
     const map = {};
-    
+
     (Array.isArray(quotes) ? quotes : [quotes]).forEach(q => {
-      if (q && q.symbol) {
+      if (q?.symbol) {
         map[q.symbol] = {
           price: q.regularMarketPrice ? parseFloat(q.regularMarketPrice) : null,
           low: q.fiftyTwoWeekLow ? parseFloat(q.fiftyTwoWeekLow) : null,
@@ -87,12 +92,12 @@ module.exports = async (req, res) => {
       }
     });
 
-    const out = { yahoo: map };
-    cache[key] = { t: now, data: out };
-    return res.status(200).json(out);
-    
+    const result = { yahoo: map };
+    cache[cacheKey] = { t: now, data: result };
+    return res.json(result);
+
   } catch (e) {
-    console.error("Quote fetch error:", e.message);
-    return res.status(200).json({ yahoo: {} });
+    console.error("Quote error:", e.message);
+    return res.json({ yahoo: {} });
   }
 };
