@@ -1,0 +1,9 @@
+{
+  "name": "coldfront",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Coldfront — live market heat map (Yahoo Finance + optional FMP)",
+  "dependencies": {
+    "yahoo-finance2": "^2.13.3"
+  }
+}

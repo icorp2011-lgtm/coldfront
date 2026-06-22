@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Coldfront — live market heat map</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{--ink:#080d17;--ink2:#0d1424;--line:#1c2840;--line2:#293a5c;--text:#e9eef7;--dim:#8595b2;--dimmer:#5a6a89;
+    --t0:#3aa0ff;--t1:#27c4d6;--t2:#46d99a;--t3:#8aa0b8;--t4:#f5b53a;--t5:#fb5b6b;--buy:#3ddc97;--avoid:#fb5b6b}
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{-webkit-text-size-adjust:100%;scroll-behavior:smooth}
+  body{background:radial-gradient(1200px 560px at 90% -10%,rgba(251,91,107,.10),transparent 60%),radial-gradient(1100px 560px at 4% -8%,rgba(58,160,255,.13),transparent 60%),var(--ink);color:var(--text);font-family:"JetBrains Mono",ui-monospace,Menlo,monospace;line-height:1.45}
+  .wrap{max-width:1200px;margin:0 auto;padding:0 clamp(14px,3.2vw,34px)}
+  .nav{position:sticky;top:0;z-index:50;background:rgba(8,13,23,.82);backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
+  .nav-inner{display:flex;align-items:center;gap:18px;padding:13px clamp(14px,3.2vw,34px);max-width:1200px;margin:0 auto}
+  .brand{display:flex;align-items:center;gap:10px;font-family:"Space Grotesk",sans-serif;font-weight:700;font-size:18px;letter-spacing:-.01em;flex-shrink:0}
+  .brand .dot{width:13px;height:13px;border-radius:50%;background:linear-gradient(135deg,var(--t0),var(--t5));box-shadow:0 0 12px rgba(58,160,255,.6)}
+  .brand small{font-weight:400;font-size:9.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--dimmer);display:block;margin-top:1px}
+  .menu{display:flex;gap:4px;overflow-x:auto;scrollbar-width:none;margin-left:6px}
+  .menu::-webkit-scrollbar{display:none}
+  .menu button{background:none;border:none;color:var(--dim);font-family:inherit;font-size:12px;padding:8px 12px;border-radius:8px;cursor:pointer;white-space:nowrap;transition:.15s}
+  .menu button:hover{color:var(--text);background:#121d31} .menu button.on{color:#081019;background:var(--text);font-weight:600}
+  .live-pill{margin-left:auto;display:flex;align-items:center;gap:8px;flex-shrink:0;font-size:10.5px;color:var(--dimmer)}
+  .led{width:8px;height:8px;border-radius:50%;background:var(--dimmer)} .led.on{background:var(--buy);box-shadow:0 0 8px var(--buy)}
+  .refresh{background:var(--ink2);border:1px solid var(--line);color:var(--dim);font-family:inherit;font-size:11px;padding:7px 11px;border-radius:8px;cursor:pointer}
+  .refresh:hover{color:var(--text);border-color:var(--line2)}
+  .hero{padding:clamp(30px,5vw,56px) 0 22px}
+  .kicker{font-size:11px;letter-spacing:.34em;text-transform:uppercase;color:var(--dimmer);margin-bottom:16px}
+  h1{font-family:"Space Grotesk",sans-serif;font-weight:700;letter-spacing:-.025em;font-size:clamp(30px,7vw,60px);line-height:1.0;margin-bottom:16px}
+  h1 .cold{color:var(--t0)} h1 .hot{color:var(--t5)}
+  .sub{color:var(--dim);max-width:62ch;font-size:clamp(13px,2.4vw,15px);line-height:1.6}.sub b{color:var(--text);font-weight:500}
+  .banner{margin:22px 0 2px;background:linear-gradient(180deg,rgba(58,160,255,.08),transparent);border:1px solid var(--line);border-left:3px solid var(--t1);border-radius:12px;padding:15px 17px;font-size:12px;color:var(--dim);line-height:1.6}
+  .banner b{color:var(--text)} .banner code{background:#0a1322;border:1px solid var(--line);border-radius:5px;padding:1px 6px;color:var(--t1);font-size:11px}
+  .spectrum{margin:24px 0 4px}
+  .spectrum-bar{height:15px;border-radius:8px;background:linear-gradient(90deg,var(--t0),var(--t1),var(--t2),var(--t3),var(--t4),var(--t5));box-shadow:inset 0 0 0 1px rgba(255,255,255,.06)}
+  .spectrum-labels{display:flex;justify-content:space-between;margin-top:7px;font-size:10px;letter-spacing:.05em;color:var(--dimmer)}
+  .spectrum-labels span:first-child{color:var(--t0)} .spectrum-labels span:last-child{color:var(--t5)}
+  .controls{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:30px 0 14px}
+  .search{flex:1 1 220px;min-width:160px;background:var(--ink2);border:1px solid var(--line);border-radius:11px;color:var(--text);font-family:inherit;font-size:13px;padding:12px 14px}
+  .search::placeholder{color:var(--dimmer)} .search:focus{outline:none;border-color:var(--t1);box-shadow:0 0 0 3px rgba(39,196,214,.14)}
+  .chips{display:flex;gap:8px;flex-wrap:wrap}
+  .chip{background:var(--ink2);border:1px solid var(--line);color:var(--dim);font-family:inherit;font-size:11.5px;padding:10px 14px;border-radius:999px;cursor:pointer;transition:.15s;white-space:nowrap}
+  .chip:hover{border-color:var(--line2);color:var(--text)} .chip.on{background:#fff;color:#081019;border-color:#fff;font-weight:600}
+  .chip[data-sig="buy"].on{background:var(--buy);border-color:var(--buy)} .chip[data-sig="avoid"].on{background:var(--avoid);border-color:var(--avoid);color:#fff}
+  .sortbar{display:flex;gap:6px;align-items:center;color:var(--dimmer);font-size:11px;margin-bottom:6px;flex-wrap:wrap}
+  .sortbtn{background:none;border:none;color:var(--dim);font-family:inherit;font-size:11px;cursor:pointer;padding:5px 7px;border-radius:6px}
+  .sortbtn:hover{color:var(--text)} .sortbtn.act{color:var(--text)} .sortbtn .ar{color:var(--t1)}
+  .count{margin-left:auto;color:var(--dimmer);font-size:11px}
+  .thead{display:grid;grid-template-columns:40px 1.9fr 1.5fr 188px 92px;gap:14px;align-items:center;padding:10px 16px;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--dimmer);border-bottom:1px solid var(--line)}
+  .list{display:flex;flex-direction:column}
+  .row{display:grid;grid-template-columns:40px 1.9fr 1.5fr 188px 92px;gap:14px;align-items:center;padding:15px 16px;border-bottom:1px solid var(--line);transition:background .15s}
+  .row:hover{background:#0c1526}
+  .rank{font-size:13px;color:var(--dimmer)}
+  .name{font-family:"Space Grotesk",sans-serif;font-weight:600;font-size:15px;letter-spacing:-.01em}
+  .name .field{display:block;font-weight:400;font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--dimmer);margin-bottom:3px;font-family:"JetBrains Mono",monospace}
+  .badge{font-size:8.5px;letter-spacing:.06em;margin-left:7px;border-radius:5px;padding:1px 5px;white-space:nowrap;font-weight:700}
+  .badge.fmp{color:var(--buy);border:1px solid rgba(61,220,151,.4)}
+  .badge.yh{color:var(--t1);border:1px solid rgba(39,196,214,.4)}
+  .badge.snap{color:var(--dimmer);border:1px solid var(--line2)}
+  .badge.imp{color:var(--t5);border:1px solid rgba(251,91,107,.4)}
+  .level{font-size:12.5px} .level .vs{display:block;color:var(--dim);font-size:11px;margin-top:3px}
+  .gauge-track{height:8px;border-radius:5px;position:relative;background:linear-gradient(90deg,rgba(58,160,255,.3),rgba(138,160,184,.22),rgba(251,91,107,.3));box-shadow:inset 0 0 0 1px rgba(255,255,255,.05)}
+  .gauge-dot{position:absolute;top:50%;width:13px;height:13px;border-radius:50%;transform:translate(-50%,-50%);box-shadow:0 0 0 3px var(--ink),0 0 10px 1px currentColor}
+  .tier{display:inline-block;margin-top:8px;font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;font-weight:700}
+  .sig{font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;font-weight:700;padding:6px 8px;border-radius:7px;text-align:center;white-space:nowrap}
+  .sig.buy{color:#052b1d;background:var(--buy)} .sig.neutral{color:var(--text);background:#1a2640;border:1px solid var(--line2)} .sig.avoid{color:#fff;background:var(--avoid)}
+  .empty{padding:42px 16px;text-align:center;color:var(--dimmer);font-size:13px}
+  .foot{padding:36px 0 60px;border-top:1px solid var(--line);margin-top:40px;color:var(--dim);font-size:12px;line-height:1.7}
+  .foot b{color:var(--text)} .foot .r2{display:flex;gap:10px;align-items:flex-start;margin-top:10px} .foot .k{color:var(--t5);font-weight:700;white-space:nowrap}
+  @media(max-width:760px){
+    .thead{display:none}
+    .row{grid-template-columns:1fr;gap:10px;padding:16px 4px;position:relative}
+    .rank{position:absolute;top:16px;right:4px;font-size:11px}
+    .name{padding-right:34px} .sig{display:inline-block;width:auto}
+    .live-pill .refresh{display:none}
+  }
+</style>
+</head>
+<body>
+
+<nav class="nav"><div class="nav-inner">
+  <div class="brand"><span class="dot"></span><div>Coldfront<small>live</small></div></div>
+  <div class="menu" id="menu"></div>
+  <div class="live-pill"><span class="led" id="led"></span><span id="ledtext">loading…</span><button class="refresh" id="refresh">↻ Refresh</button></div>
+</div></nav>
+
+<div class="wrap">
+  <header class="hero">
+    <div class="kicker">Live · Yahoo + optional FMP</div>
+    <h1>What's <span class="cold">cheap</span> and what's <span class="hot">expensive</span></h1>
+    <p class="sub">Live markets pull their <b>52-week high/low</b> and self-score: <b>cold</b> = near the bottom of the past year, <b>hot</b> = near the top. Markets with no feed (collectibles, used gear, carbon) stay curated.</p>
+    <div class="banner" id="banner"></div>
+    <div class="spectrum"><div class="spectrum-bar"></div>
+      <div class="spectrum-labels"><span>52-WK LOW · cold</span><span>MID</span><span>52-WK HIGH · hot</span></div></div>
+  </header>
+
+  <div class="controls">
+    <input id="search" class="search" type="text" placeholder="Search asset or category…" autocomplete="off" />
+    <div class="chips" id="sigchips">
+      <button class="chip on" data-sig="all">All signals</button>
+      <button class="chip" data-sig="buy">Buy-side</button>
+      <button class="chip" data-sig="neutral">Neutral</button>
+      <button class="chip" data-sig="avoid">Avoid</button>
+    </div>
+  </div>
+  <div class="sortbar"><span>Sort:</span>
+    <button class="sortbtn act" data-sort="temp">Position <span class="ar">↑</span></button>
+    <button class="sortbtn" data-sort="name">Asset</button>
+    <button class="sortbtn" data-sort="field">Field</button>
+    <button class="sortbtn" data-sort="signal">Signal</button>
+    <span class="count" id="count"></span>
+  </div>
+  <div class="thead"><div>#</div><div>Asset</div><div>Current level</div><div>Position vs 52-wk</div><div>Signal</div></div>
+  <div class="list" id="list"></div>
+
+  <footer class="foot">
+    <b>Coldfront.</b> Live rows update from Yahoo Finance (and FMP first, if you enable it). Curated rows are hand-set for markets with no public feed. Position is a 52-week score.
+    <div class="r2"><span class="k">DATA</span><span>Yahoo data is unofficial and ~15-min delayed — fine for a yearly-range heat map, not for trading. Verify before acting; not investment advice.</span></div>
+  </footer>
+</div>
+
+<script>
+/* ===========================================================
+   CONFIG — nothing secret lives here. The proxy handles keys.
+   =========================================================== */
+const CFG = { proxyUrl: "/api/quote", refreshMs: 0 };  // refreshMs:60000 = auto-refresh each minute
+
+/* Each asset: curated snapshot + optional yahoo / fmp symbols.
+   Priority when both exist: FMP first (if enabled on server), else Yahoo. */
+const DATA = [
+  {name:"Lab-grown diamonds", field:"Collectibles", current:"~$409 / carat", vs:"−88% since 2020", tier:"deep-low", temp:5, signal:"buy", impaired:true},
+  {name:"NFTs (digital)", field:"Crypto", current:"$2.4B market cap", vs:"far below 2021 peak", tier:"deep-low", temp:7, signal:"neutral", impaired:true},
+  {name:"Polysilicon (solar)", field:"Clean tech", current:"~CNY 50 / kg", vs:"below production cost", tier:"deep-low", temp:8, signal:"buy"},
+  {name:"Voluntary carbon credits", field:"Carbon", current:"~$6 / tonne", vs:"historic low", tier:"deep-low", temp:9, signal:"neutral", impaired:true},
+  {name:"Solar PV modules", field:"Clean tech", current:"$0.065–0.095 / W", vs:"−38% vs 2022", tier:"deep-low", temp:11, signal:"buy"},
+  {name:"Li-ion battery packs", field:"Clean tech", current:"$108 / kWh", vs:"record low", tier:"deep-low", temp:12, signal:"buy"},
+  {name:"Ethereum", field:"Crypto", yahoo:"ETH-USD", fmp:"ETHUSD", current:"~$1,550", vs:"~−68% vs ATH", tier:"deep-low", temp:14, signal:"neutral"},
+  {name:"Sugar", field:"Agriculture", yahoo:"SB=F", fmp:"SBUSD", current:"near 5-yr low", vs:"global surplus", tier:"low", temp:18, signal:"buy"},
+  {name:"Natural diamonds", field:"Collectibles", current:"lowest this century", vs:"−26% vs 2022", tier:"low", temp:20, signal:"neutral"},
+  {name:"Fine wine (Liv-ex)", field:"Collectibles", current:"5-yr floor", vs:"−25–30% vs 2022", tier:"low", temp:22, signal:"buy"},
+  {name:"Solana", field:"Crypto", yahoo:"SOL-USD", fmp:"SOLUSD", current:"~$61", vs:"far below highs", tier:"low", temp:23, signal:"neutral"},
+  {name:"Corn", field:"Agriculture", yahoo:"ZC=F", fmp:"ZCUSD", current:"~$4.35 / bu", vs:"below breakeven", tier:"low", temp:24, signal:"buy"},
+  {name:"Coffee", field:"Agriculture", yahoo:"KC=F", fmp:"KCUSD", current:"~$2.50 / lb", vs:"18-mo low", tier:"low", temp:25, signal:"buy"},
+  {name:"Soybeans", field:"Agriculture", yahoo:"ZS=F", fmp:"ZSUSD", current:"~$11 / bu", vs:"below breakeven", tier:"low", temp:26, signal:"buy"},
+  {name:"Wheat", field:"Agriculture", yahoo:"ZW=F", fmp:"ZWUSD", current:"~$5–6 / bu", vs:"4th yr losses", tier:"low", temp:27, signal:"buy"},
+  {name:"Bitcoin", field:"Crypto", yahoo:"BTC-USD", fmp:"BTCUSD", current:"~$60–65k", vs:"off cycle peak", tier:"low", temp:28, signal:"neutral"},
+  {name:"US stocks at 52-wk lows", field:"Equities", current:"Moderna, CarMax, AAL…", vs:"1-year lows", tier:"low", temp:29, signal:"neutral"},
+  {name:"Palladium", field:"Metals", yahoo:"PA=F", fmp:"PAUSD", current:"~$1,210 / oz", vs:"~−65% vs 2022", tier:"low", temp:30, signal:"neutral"},
+  {name:"Used farm equipment", field:"Tools & Equipment", current:"auction values sliding", vs:"−5–9% YoY", tier:"low", temp:31, signal:"buy"},
+  {name:"US natural gas", field:"Energy", yahoo:"NG=F", fmp:"NGUSD", current:"~$3.23 / MMBtu", vs:"−19% YoY", tier:"low", temp:32, signal:"buy"},
+  {name:"Iron ore", field:"Metals", current:"below 2019 levels", vs:"multi-yr downtrend", tier:"low", temp:33, signal:"neutral"},
+  {name:"Indian blue-chips at lows", field:"Equities", current:"TCS, Reliance, HCL", vs:"1-year lows", tier:"low", temp:34, signal:"neutral"},
+  {name:"Platinum", field:"Metals", yahoo:"PL=F", fmp:"PLUSD", current:"selling off", vs:"cheap vs gold", tier:"cooling", temp:42, signal:"neutral"},
+  {name:"Classic cars", field:"Collectibles", current:"Hagerty 58.3", vs:"15-yr-low rating", tier:"cooling", temp:44, signal:"neutral"},
+  {name:"Used cars (sedans / EVs)", field:"Tools & Equipment", current:"−1–5%", vs:"softest segments", tier:"cooling", temp:46, signal:"neutral"},
+  {name:"Luxury watches", field:"Collectibles", current:"+8% in 2025", vs:"−30–50% vs 2022", tier:"cooling", temp:48, signal:"neutral"},
+  {name:"Cotton", field:"Agriculture", yahoo:"CT=F", fmp:"CTUSD", current:"+45% off Feb low", vs:"recovered", tier:"mid", temp:53, signal:"neutral"},
+  {name:"Shipping containers", field:"Tools & Equipment", current:"eased / overcapacity", vs:"better buying", tier:"mid", temp:54, signal:"neutral"},
+  {name:"Crude oil (WTI)", field:"Energy", yahoo:"CL=F", fmp:"CLUSD", current:"~$76 / bbl", vs:"−40% off war peak", tier:"mid", temp:55, signal:"neutral"},
+  {name:"Cocoa", field:"Agriculture", yahoo:"CC=F", fmp:"CCUSD", current:"off Jan peak", vs:"surplus returning", tier:"mid", temp:56, signal:"neutral"},
+  {name:"Aluminum", field:"Metals", yahoo:"ALI=F", current:"3-year high", vs:"tight supply", tier:"high", temp:80, signal:"avoid"},
+  {name:"Lithium", field:"Metals", current:">$20 / kg", vs:"+100%+ off low", tier:"high", temp:82, signal:"avoid"},
+  {name:"Compliance carbon (EU ETS)", field:"Carbon", current:"~€91–93 / t", vs:"firm", tier:"high", temp:74, signal:"avoid"},
+  {name:"Baltic Dry Index", field:"Freight", current:"~2,650–2,800", vs:"+59% YoY", tier:"high", temp:70, signal:"avoid"},
+  {name:"Silver", field:"Metals", yahoo:"SI=F", fmp:"SIUSD", current:"near record", vs:"+130% rally", tier:"high", temp:85, signal:"avoid"},
+  {name:"Cobalt", field:"Metals", current:">$56k / t", vs:"+160% off low", tier:"peak", temp:87, signal:"avoid"},
+  {name:"Copper", field:"Metals", yahoo:"HG=F", fmp:"HGUSD", current:">$13,000 / t", vs:"record high", tier:"peak", temp:90, signal:"avoid"},
+  {name:"Gold", field:"Metals", yahoo:"GC=F", fmp:"GCUSD", current:"~$4,500", vs:"record", tier:"peak", temp:92, signal:"avoid"},
+  {name:"Japan Nikkei 225", field:"Equities", yahoo:"^N225", fmp:"^N225", current:"all-time high", vs:"record peak", tier:"peak", temp:93, signal:"avoid"},
+  {name:"Trading cards (Pokémon)", field:"Collectibles", current:"+46% YoY", vs:"boom", tier:"peak", temp:94, signal:"avoid"},
+  {name:"GPUs", field:"Electronics", current:"MSRPs doubling", vs:"memory spike", tier:"peak", temp:95, signal:"avoid"},
+  {name:"SSD / NAND", field:"Electronics", current:"surging", vs:"AI supercycle", tier:"peak", temp:96, signal:"avoid"},
+  {name:"DRAM / RAM", field:"Electronics", current:"+172% YoY", vs:"6× in a year", tier:"peak", temp:97, signal:"avoid"},
+];
+
+const TIERS={"deep-low":{label:"Deep low",color:"#3aa0ff"},"low":{label:"Low",color:"#27c4d6"},"cooling":{label:"Cooling",color:"#46d99a"},"mid":{label:"Mid",color:"#8aa0b8"},"high":{label:"High",color:"#f5b53a"},"peak":{label:"Peak",color:"#fb5b6b"}};
+const CATS=["All","Energy","Metals","Agriculture","Crypto","Equities","Clean tech","Electronics","Collectibles","Tools & Equipment","Carbon","Freight"];
+let state={sort:"temp",dir:1,sig:"all",cat:"All",q:""};
+
+function tempColor(t){const s=[[0,58,160,255],[25,39,196,214],[50,138,160,184],[72,245,181,58],[100,251,91,107]];
+  for(let i=0;i<s.length-1;i++){const[a,ar,ag,ab]=s[i],[b,br,bg,bb]=s[i+1];if(t<=b){const k=(t-a)/(b-a);
+    return`rgb(${Math.round(ar+(br-ar)*k)},${Math.round(ag+(bg-ag)*k)},${Math.round(ab+(bb-ab)*k)})`;}}return"rgb(251,91,107)";}
+function tierFromTemp(t){if(t<12)return"deep-low";if(t<35)return"low";if(t<50)return"cooling";if(t<65)return"mid";if(t<85)return"high";return"peak";}
+function fmtNum(n){if(n==null||isNaN(n))return"—";const a=Math.abs(n);
+  if(a>=1000)return n.toLocaleString(undefined,{maximumFractionDigits:0});
+  if(a>=1)return n.toLocaleString(undefined,{maximumFractionDigits:2});
+  return n.toLocaleString(undefined,{maximumFractionDigits:4});}
+
+const menu=document.getElementById("menu");
+CATS.forEach(c=>{const b=document.createElement("button");b.textContent=c;if(c==="All")b.classList.add("on");
+  b.addEventListener("click",()=>{state.cat=c;[...menu.children].forEach(x=>x.classList.remove("on"));b.classList.add("on");render();});menu.appendChild(b);});
+
+const list=document.getElementById("list"),countEl=document.getElementById("count");
+function render(){
+  let rows=DATA.filter(d=>{
+    if(state.sig!=="all"&&d.signal!==state.sig)return false;
+    if(state.cat!=="All"&&d.field!==state.cat)return false;
+    if(state.q){const s=(d.name+" "+d.field+" "+d.current+" "+d.vs).toLowerCase();if(!s.includes(state.q))return false;}
+    return true;});
+  rows.sort((a,b)=>{let av,bv;
+    if(state.sort==="temp"){av=a.temp;bv=b.temp;}
+    else if(state.sort==="name"){av=a.name.toLowerCase();bv=b.name.toLowerCase();}
+    else if(state.sort==="field"){av=a.field+a.temp/1000;bv=b.field+b.temp/1000;}
+    else{const o={buy:0,neutral:1,avoid:2};av=o[a.signal]+a.temp/1000;bv=o[b.signal]+b.temp/1000;}
+    if(av<bv)return -state.dir;if(av>bv)return state.dir;return 0;});
+  countEl.textContent=rows.length+" / "+DATA.length+" shown";
+  if(!rows.length){list.innerHTML='<div class="empty">No assets match those filters.</div>';return;}
+  list.innerHTML=rows.map((d,i)=>{const t=TIERS[d.tier],c=tempColor(d.temp),
+    sl={buy:"Buy-side",neutral:"Neutral",avoid:"Avoid"}[d.signal];
+    let badge='';
+    if(d._src==='FMP')badge='<span class="badge fmp">LIVE · FMP</span>';
+    else if(d._src==='YAHOO')badge='<span class="badge yh">LIVE · YH</span>';
+    else if(d.yahoo||d.fmp)badge='<span class="badge snap">SNAPSHOT</span>';
+    else badge='<span class="badge snap">CURATED</span>';
+    const imp=d.impaired?'<span class="badge imp">IMPAIRED</span>':'';
+    return`<div class="row">
+      <div class="rank">${String(i+1).padStart(2,'0')}</div>
+      <div class="name"><span class="field">${d.field}</span>${d.name}${badge}${imp}</div>
+      <div class="level">${d.current}<span class="vs">${d.vs}</span></div>
+      <div><div class="gauge-track"><div class="gauge-dot" style="left:${d.temp}%;background:${c};color:${c}"></div></div><span class="tier" style="color:${t.color}">${t.label}</span></div>
+      <div><span class="sig ${d.signal}">${sl}</span></div>
+    </div>`;}).join("");
+}
+
+async function goLive(){
+  const led=document.getElementById("led"),ledtext=document.getElementById("ledtext");
+  const fmpSyms=[...new Set(DATA.filter(d=>d.fmp).map(d=>d.fmp))];
+  const yahSyms=[...new Set(DATA.filter(d=>d.yahoo).map(d=>d.yahoo))];
+  ledtext.textContent="updating…";
+  try{
+    const url=`${CFG.proxyUrl}?fmp=${encodeURIComponent(fmpSyms.join(","))}&yahoo=${encodeURIComponent(yahSyms.join(","))}`;
+    const r=await fetch(url); if(!r.ok)throw new Error("http "+r.status);
+    const {fmp={},yahoo={}}=await r.json();
+    let liveCount=0;
+    DATA.forEach(d=>{
+      let q=null,src=null;
+      if(d.fmp&&fmp[d.fmp]&&isFinite(fmp[d.fmp].price)){q=fmp[d.fmp];src="FMP";}
+      else if(d.yahoo&&yahoo[d.yahoo]&&isFinite(yahoo[d.yahoo].price)){q=yahoo[d.yahoo];src="YAHOO";}
+      if(q&&q.high>q.low){
+        let pos=((q.price-q.low)/(q.high-q.low))*100; pos=Math.max(1,Math.min(99,pos));
+        d.temp=pos; d.tier=tierFromTemp(pos); d._src=src; liveCount++;
+        const dollar=!(d.yahoo&&d.yahoo.startsWith("^"));
+        d.current=(dollar?"$":"")+fmtNum(q.price);
+        d.vs=`52-wk pos ${Math.round(pos)}% · ${fmtNum(q.low)}–${fmtNum(q.high)}`;
+      }
+    });
+    led.classList.add("on");
+    ledtext.textContent=`live · ${liveCount} feeds · ${new Date().toLocaleTimeString()}`;
+    render();
+  }catch(e){
+    led.classList.remove("on");
+    ledtext.textContent="snapshot (feed offline)";
+  }
+}
+
+document.getElementById("search").addEventListener("input",e=>{state.q=e.target.value.trim().toLowerCase();render();});
+document.querySelectorAll("#sigchips .chip").forEach(ch=>ch.addEventListener("click",()=>{document.querySelectorAll("#sigchips .chip").forEach(c=>c.classList.remove("on"));ch.classList.add("on");state.sig=ch.dataset.sig;render();}));
+document.querySelectorAll(".sortbtn").forEach(b=>b.addEventListener("click",()=>{const s=b.dataset.sort;if(state.sort===s)state.dir*=-1;else{state.sort=s;state.dir=1;}
+  document.querySelectorAll(".sortbtn").forEach(x=>{x.classList.remove("act");const a=x.querySelector(".ar");if(a)a.remove();});
+  b.classList.add("act");const a=document.createElement("span");a.className="ar";a.textContent=state.dir>0?" ↑":" ↓";b.appendChild(a);render();}));
+document.getElementById("refresh").addEventListener("click",goLive);
+
+const liveMapped=DATA.filter(d=>d.yahoo||d.fmp).length;
+document.getElementById("banner").innerHTML=`<b>${liveMapped} live-capable markets</b> · the rest are curated snapshots with no public feed. Yahoo powers everything for free; turn on FMP priority anytime by adding an <code>FMP_API_KEY</code> on the server.`;
+
+render(); goLive();
+if(CFG.refreshMs>0) setInterval(goLive, CFG.refreshMs);
+</script>
+</body>
+</html>
